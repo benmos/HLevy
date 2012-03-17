@@ -1,0 +1,12 @@
+Name:                hlevy
+Version:             0.0.0.1
+Description:         Implementation of the Levy language
+License:             BSD
+License-file:        LICENSE
+Author:              Ben Moseley
+Maintainer:          ben@moseley.name
+Build-Type:          Simple
+Cabal-Version:       >=1.2
+Executable hlevy
+  Main-is:           Hlevy.hs
+  Build-Depends:     base >= 3 && < 5
