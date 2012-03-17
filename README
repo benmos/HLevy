@@ -1,0 +1,3 @@
+This is a Haskell implementation of the Levy language.
+
+The language is an implementation of Paul Levy's Call By Push Value (CBPV) calculus.
