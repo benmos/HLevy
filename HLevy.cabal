@@ -8,5 +8,7 @@ Maintainer:          ben@moseley.name
 Build-Type:          Simple
 Cabal-Version:       >=1.2
 Executable hlevy
-  Main-is:           Hlevy.hs
-  Build-Depends:     base >= 3 && < 5
+  hs-source-dirs:    src
+  Main-is:           Main.hs
+  Build-Depends:     base >= 3 && < 5,
+                     uu-parsinglib > 2.7
