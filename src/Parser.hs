@@ -16,7 +16,6 @@ import Text.ParserCombinators.UU
 import Text.ParserCombinators.UU.Utils hiding (execParser, runParser)
 import Text.ParserCombinators.UU.BasicInstances (LineColPos(..),Error(..),Str,Parser,pSym,createStr,
                                                 show_expecting)
-import qualified Data.ListLike as LL
 import Text.Printf
 
 type UUP a = P (Str Char String LineColPos) a
@@ -49,8 +48,7 @@ testExpr = runParser "input" pExpr "3+4*2-1"
 -- except that they have more sensible types... this needs to be pushed upstream.
 
 -- | The lower-level interface. Returns all errors.
-execParser :: LL.ListLike state Char =>
-              P (Str Char state LineColPos) a -> state -> (a, [Error LineColPos])
+execParser :: P (Str Char String LineColPos) a -> String -> (a, [Error LineColPos])
 execParser p = parse_h ((,) <$> p <*> pEnd) . createStr (LineColPos 0 0 0)
 
 -- | The higher-level interface. (Calls 'error' with a simplified error).
