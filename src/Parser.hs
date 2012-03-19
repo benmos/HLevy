@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types #-}
 --
 -- HLevy
 -- Copyright (c) 2012 - Ben Moseley
@@ -20,34 +20,49 @@ import Text.ParserCombinators.UU.BasicInstances (LineColPos(..),Error(..),Str,Pa
                                                 pRange)
 import Text.Printf
 
-operators :: [[(Char, Expr -> Expr -> Expr)]]
+newtype WrappedParser a = WrappedParser { unWrapParser :: Parser a }
+
+operators :: [[(WrappedParser String, String -> Expr -> Expr -> Expr)]]
 operators = [
-              [('+', Plus), ('-', Minus)],
-              [('*', Times)] -- ,
-              -- [('^', (^))]
+              [(wrapSym "<", const Less), (wrapSym "=", const Equal)],
+              [(wrapSym "+", const Plus), (wrapSym "-", const Minus)],
+              [(wrapSym "*", const Times)],
+              [(WrappedParser $ fmap unName $ (pSymbol "to" *> pIdentifier <* pSymbol "in"), flip To . Name)]
             ]
+  where
+    wrapSym s = WrappedParser $ pSymbol $ s
 
-same_prio :: [(Char, a)] -> Parser a
-same_prio ops = foldr (<|>) empty [ op <$ lexeme (pSym c) | (c, op) <- ops]
-
-
-pIntExpr :: Parser Expr
-pIntExpr = foldr pChainl (EInt <$> pNatural <|> pParens pIntExpr) (map same_prio operators)
+same_prio :: [(WrappedParser b, b -> a)] -> Parser a
+same_prio ops = foldr (<|>) empty [ op <$> lexeme p | (WrappedParser p, op) <- ops]
 
 pExpr :: Parser Expr
-pExpr = Var <$> pIdentifier <|> pIntExpr <|> pBoolExpr
+pExpr = pUnaryOpExpr <|>
+              pBinOpExpr <|>
+              pLetExpr <|>
+              Var <$> pIdentifier
+    where
+      pLetExpr = Let <$> (pSymbol "let" *> pIdentifier) <*>
+                         (pSymbol "="   *> pExpr) <*>
+                         (pSymbol "in"  *> pExpr)
+
+      pTo :: Parser Expr
+      pTo = To <$> pExpr <*> (pSymbol "to" *> pIdentifier <* pSymbol "in") <*> pExpr
+
+      pBinOpExpr   = foldr pChainl (pAtom <|> pParens pExpr) (map same_prio operators)
+      pUnaryOpExpr = ((Thunk  <$ pSymbol "thunk"  <|>
+                       Force  <$ pSymbol "force"  <|>
+                       Return <$ pSymbol "return") <*> pExpr)
+
+pAtom :: Parser Expr
+pAtom = EInt <$> pNatural <|>
+        EBool True  <$ pSymbol "true" <|>
+        EBool False <$ pSymbol "false"
 
 pIdentifierRaw :: Parser Name
 pIdentifierRaw = Name <$> ((:) <$> pRange ('a','z') <*> pMunch isAlphaNum `micro` 1)
 
 pIdentifier :: Parser Name
 pIdentifier = lexeme pIdentifierRaw
-
-pBoolExpr :: Parser Expr
-pBoolExpr = pBoolConst <|> (\x op y -> x `op` y) <$> pIntExpr <*> pBoolOp <*> pIntExpr
-    where
-      pBoolConst = EBool True  <$ pSymbol "true" <|>
-                   EBool False <$ pSymbol "false"
 
 pBoolOp :: Parser (Expr -> Expr -> Expr)
 pBoolOp = Less <$ pSym '<'

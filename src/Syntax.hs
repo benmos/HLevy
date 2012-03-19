@@ -11,7 +11,7 @@ where
 
 import Control.Applicative
 
-newtype Name = Name String deriving (Eq,Ord)
+newtype Name = Name { unName :: String } deriving (Eq,Ord)
 
 instance Show Name where show (Name s) = s
 
@@ -27,24 +27,23 @@ type VType = LType
 
 type Value = Expr
 
-    
-data Expr = Var Name
-          | EInt Int
-          | EBool Bool
-          | Times Value Value
-          | Plus Value Value
-          | Minus Value Value
-          | Equal Value Value
-          | Less Value Value
-          | Thunk Expr
-          | Force Value
+data Expr = Var    Name
+          | EInt   Int
+          | EBool  Bool
+          | Times  Value Value
+          | Plus   Value Value
+          | Minus  Value Value
+          | Equal  Value Value
+          | Less   Value Value
+          | Thunk  Expr
+          | Force  Value
           | Return Value
-          | To Expr Name Expr
-          | Let Name Value Expr
-          | If Value Expr Expr
-          | Fun Name LType Expr
-          | Apply Expr Value
-          | Rec Name LType Expr
+          | To     Expr  Name  Expr
+          | Let    Name  Value Expr
+          | If     Value Expr  Expr
+          | Fun    Name  LType Expr
+          | Apply  Expr  Value
+          | Rec    Name  LType Expr
              deriving (Eq,Ord,Show)
 
 data TopLevelCmd = Expr Expr
