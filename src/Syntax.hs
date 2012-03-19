@@ -4,7 +4,8 @@
 -- Copyright (c) 2012 - Ben Moseley
 --
 module Syntax(
-  Expr(..)
+  Expr(..),
+  Name(..)
 )
 where
 
@@ -26,6 +27,7 @@ type VType = LType
 
 type Value = Expr
 
+    
 data Expr = Var Name
           | EInt Int
           | EBool Bool
