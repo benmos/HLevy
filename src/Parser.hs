@@ -75,7 +75,7 @@ pInitialApp = pNonAppExpr <|>
 pNonAppExpr :: UUP Expr
 pNonAppExpr = EBool True  <$  pSymbol "true"  <<|>
               EBool False <$  pSymbol "false" <<|>
-              EInt        <$> pNatural        <<|>
+              EInt        <$> pInteger        <<|>
               Var         <$> pIdentifier <|>
               pParens pExpr
 
