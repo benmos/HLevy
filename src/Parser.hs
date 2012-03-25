@@ -36,29 +36,33 @@ same_prio :: [(UUP b, b -> a)] -> UUP a
 same_prio ops = foldr (<|>) empty [ op <$> lexeme p | (p, op) <- ops]
 
 pExpr :: UUP Expr
-pExpr = pApp <|>
-        pBinOpExpr <|>
-        pLetExpr
+pExpr = pApp        <|>
+        pBinOpExpr  <|>
+        pLetExpr    <|>
+        pIfExpr
     where
+      pBinOpExpr = foldr pChainl (pNonAppExpr) (map same_prio operators)
       pLetExpr   = Let <$> (pSymbol "let" *> pIdentifier) <*>
                            (pSymbol "="   *> pExpr) <*>
                            (pSymbol "in"  *> pExpr)
-      pBinOpExpr = foldr pChainl (pNonAppExpr) (map same_prio operators)
+      pIfExpr    = If  <$> (pSymbol "if"   *> pExpr) <*>
+                           (pSymbol "then" *> pExpr) <*>
+                           (pSymbol "else" *> pExpr)
 
 pApp :: UUP Expr
-pApp = Apply <$> pInitialApp <*> pChainl (pure Apply) pNonAppExpr <|>
-       pNonAppExpr
+pApp = Apply <$> pInitialApp <*> pChainl (pure Apply) pNonAppExpr
 
 pInitialApp :: UUP Expr
-pInitialApp = (Thunk  <$ pSymbol "thunk"  <|>
+pInitialApp = pNonAppExpr <|>
+              (Thunk  <$ pSymbol "thunk"  <|>
                Force  <$ pSymbol "force"  <|>
                Return <$ pSymbol "return") <*> pNonAppExpr
 
 pNonAppExpr :: UUP Expr
-pNonAppExpr = Var <$> pIdentifier <|>
-              EBool True  <$ pSymbol "true" <|>
-              EBool False <$ pSymbol "false" <|>
-              EInt <$> pNatural <|>
+pNonAppExpr = EBool True  <$  pSymbol "true"  <<|>
+              EBool False <$  pSymbol "false" <<|>
+              EInt        <$> pNatural        <<|>
+              Var         <$> pIdentifier <|>
               pParens pExpr
 
 pIdentifierRaw :: UUP Name
@@ -83,7 +87,7 @@ pNonArrType = VInt    <$ pSymbol "int" <|>
 ------------------------------------------------------------------------
 
 testExpr :: Expr
-testExpr = runParser "input" pExpr "3+4*2-100"
+testExpr = runParser "input" pExpr "if true then 3+4*2-100 else f 4"
 
 testType :: LType
 testType = runParser "input" pType "bool -> (int -> U F bool)"
