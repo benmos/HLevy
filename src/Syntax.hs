@@ -4,6 +4,7 @@
 -- Copyright (c) 2012 - Ben Moseley
 --
 module Syntax(
+  LType(..),
   Expr(..),
   Name(..)
 )

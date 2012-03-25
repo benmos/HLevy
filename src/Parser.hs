@@ -4,6 +4,7 @@
 -- Copyright (c) 2012 - Ben Moseley
 --
 module Parser(
+  pType,
   pExpr
 )
 where
@@ -66,9 +67,24 @@ pIdentifierRaw = Name <$> ((:) <$> pRange ('a','z') <*> pMunch isAlphaNum `micro
 pIdentifier :: UUP Name
 pIdentifier = lexeme pIdentifierRaw
 
-pBoolOp :: UUP (Expr -> Expr -> Expr)
-pBoolOp = Less <$ pSym '<'
+------------------------------------------------------------------------
+
+pType :: UUP LType
+pType = pNonArrType <|>
+        CArrow <$> pNonArrType <* pSymbol "->" <*> pType
+
+pNonArrType :: UUP LType
+pNonArrType = VInt    <$ pSymbol "int" <|>
+              VBool   <$ pSymbol "bool" <|>
+              VForget <$ pSymbol "U" <*> pType <|>
+              CFree   <$ pSymbol "F" <*> pType <|>
+              pParens pType
+
+------------------------------------------------------------------------
 
 testExpr :: Expr
 testExpr = runParser "input" pExpr "3+4*2-100"
+
+testType :: LType
+testType = runParser "input" pType "bool -> (int -> U F bool)"
 
