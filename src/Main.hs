@@ -5,7 +5,9 @@
 module Main where
 
 import Parser
-import Text.ParserCombinators.UU.Utils
+import UUParsingLibFixes
+
+import Text.ParserCombinators.UU.Utils hiding (runParser)
 
 main :: IO ()
 main = do

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, Rank2Types #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types, ImpredicativeTypes #-}
 --
 -- HLevy
 -- Copyright (c) 2012 - Ben Moseley
@@ -9,63 +9,66 @@ module Parser(
 where
 
 import Syntax
+import UUParsingLibFixes
 
 import Control.Applicative
 import Data.Char
-
-import Text.ParserCombinators.UU
-import Text.ParserCombinators.UU.Utils
+import Data.List
+import Text.ParserCombinators.UU hiding (Apply)
+import Text.ParserCombinators.UU.Utils hiding (runParser, execParser)
 import Text.ParserCombinators.UU.BasicInstances (LineColPos(..),Error(..),Str,Parser,pSym,createStr,
                                                 show_expecting, pSymInsert, Insertion(..), pMunch,
-                                                pRange)
+                                                pRange, ParserTrafo)
 import Text.Printf
 
-newtype WrappedParser a = WrappedParser { unWrapParser :: Parser a }
+type UUP a = P (Str Char String LineColPos) a
 
-operators :: [[(WrappedParser String, String -> Expr -> Expr -> Expr)]]
+operators :: [[(UUP String, String -> Expr -> Expr -> Expr)]]
 operators = [
-              [(wrapSym "<", const Less), (wrapSym "=", const Equal)],
-              [(wrapSym "+", const Plus), (wrapSym "-", const Minus)],
-              [(wrapSym "*", const Times)],
-              [(WrappedParser $ fmap unName $ (pSymbol "to" *> pIdentifier <* pSymbol "in"), flip To . Name)]
+              [(pSymbol "<", const Less), (pSymbol "=", const Equal)],
+              [(pSymbol "+", const Plus), (pSymbol "-", const Minus)],
+              [(pSymbol "*", const Times)],
+              [(fmap unName $ (pSymbol "to" *> pIdentifier <* pSymbol "in"), flip To . Name)]
             ]
-  where
-    wrapSym s = WrappedParser $ pSymbol $ s
 
-same_prio :: [(WrappedParser b, b -> a)] -> Parser a
-same_prio ops = foldr (<|>) empty [ op <$> lexeme p | (WrappedParser p, op) <- ops]
+same_prio :: [(UUP b, b -> a)] -> UUP a
+same_prio ops = foldr (<|>) empty [ op <$> lexeme p | (p, op) <- ops]
 
-pExpr :: Parser Expr
-pExpr = pUnaryOpExpr <|>
-              pBinOpExpr <|>
-              pLetExpr <|>
-              Var <$> pIdentifier
+pExpr :: UUP Expr
+pExpr = pApp <|>
+        pBinOpExpr <|>
+        pLetExpr
     where
-      pLetExpr = Let <$> (pSymbol "let" *> pIdentifier) <*>
-                         (pSymbol "="   *> pExpr) <*>
-                         (pSymbol "in"  *> pExpr)
+      pLetExpr   = Let <$> (pSymbol "let" *> pIdentifier) <*>
+                           (pSymbol "="   *> pExpr) <*>
+                           (pSymbol "in"  *> pExpr)
+      pBinOpExpr = foldr pChainl (pNonAppExpr) (map same_prio operators)
 
-      pTo :: Parser Expr
-      pTo = To <$> pExpr <*> (pSymbol "to" *> pIdentifier <* pSymbol "in") <*> pExpr
+pApp :: UUP Expr
+pApp = Apply <$> pInitialApp <*> pChainl (pure Apply) pNonAppExpr <|>
+       pNonAppExpr
 
-      pBinOpExpr   = foldr pChainl (pAtom <|> pParens pExpr) (map same_prio operators)
-      pUnaryOpExpr = ((Thunk  <$ pSymbol "thunk"  <|>
-                       Force  <$ pSymbol "force"  <|>
-                       Return <$ pSymbol "return") <*> pExpr)
+pInitialApp :: UUP Expr
+pInitialApp = (Thunk  <$ pSymbol "thunk"  <|>
+               Force  <$ pSymbol "force"  <|>
+               Return <$ pSymbol "return") <*> pNonAppExpr
 
-pAtom :: Parser Expr
-pAtom = EInt <$> pNatural <|>
-        EBool True  <$ pSymbol "true" <|>
-        EBool False <$ pSymbol "false"
+pNonAppExpr :: UUP Expr
+pNonAppExpr = Var <$> pIdentifier <|>
+              EBool True  <$ pSymbol "true" <|>
+              EBool False <$ pSymbol "false" <|>
+              EInt <$> pNatural <|>
+              pParens pExpr
 
-pIdentifierRaw :: Parser Name
+pIdentifierRaw :: UUP Name
 pIdentifierRaw = Name <$> ((:) <$> pRange ('a','z') <*> pMunch isAlphaNum `micro` 1)
 
-pIdentifier :: Parser Name
+pIdentifier :: UUP Name
 pIdentifier = lexeme pIdentifierRaw
 
-pBoolOp :: Parser (Expr -> Expr -> Expr)
+pBoolOp :: UUP (Expr -> Expr -> Expr)
 pBoolOp = Less <$ pSym '<'
 
 testExpr :: Expr
 testExpr = runParser "input" pExpr "3+4*2-100"
+
