@@ -5,7 +5,8 @@
 --
 module Parser(
   pType,
-  pExpr
+  pExpr,
+  pTopLevel
 )
 where
 
@@ -43,7 +44,7 @@ pExpr = pApp        <|>
         pFunExpr    <|>
         pRecExpr
     where
-      pBinOpExpr = foldr pChainl (pNonAppExpr) (map same_prio operators)
+      pBinOpExpr = foldr pChainl (pInitialApp) (map same_prio operators)
       pLetExpr   = Let <$> (pSymbol "let" *> pIdentifier) <*>
                            (pSymbol "="   *> pExpr) <*>
                            (pSymbol "in"  *> pExpr)
@@ -58,7 +59,7 @@ pExpr = pApp        <|>
                            (pSymbol "->"   *> pExpr)
 
 pApp :: UUP Expr
-pApp = Apply <$> pInitialApp <*> pChainl (pure Apply) pNonAppExpr
+pApp = (foldl1 Apply .) . (:) <$> pInitialApp <*> pList1 pNonAppExpr
 
 pInitialApp :: UUP Expr
 pInitialApp = pNonAppExpr <|>
@@ -91,6 +92,22 @@ pNonArrType = VInt    <$ pSymbol "int" <|>
               VForget <$ pSymbol "U" <*> pType <|>
               CFree   <$ pSymbol "F" <*> pType <|>
               pParens pType
+
+------------------------------------------------------------------------
+
+pDef :: UUP TopLevelCmd
+pDef = Def    <$> (pSymbol "let" *> pIdentifier) <*> (pSymbol "=" *> pExpr) <|>
+       RunDef <$> (pSymbol "do"  *> pIdentifier) <*> (pSymbol "=" *> pExpr)
+
+pCmd :: UUP TopLevelCmd
+pCmd = Use . unName <$> (pSymbol "use" *> pIdentifier) <|> -- is pIdentifier right?
+       Quit         <$ pSymbol "quit"
+
+pTopLevelCmd :: UUP TopLevelCmd
+pTopLevelCmd = pDef <|> pCmd <|> Expr <$> pExpr
+
+pTopLevel :: UUP [TopLevelCmd]
+pTopLevel = pListSep_ng (pSymbol ";;") pTopLevelCmd <* pSymbol ";;"
 
 ------------------------------------------------------------------------
 

@@ -6,7 +6,8 @@
 module Syntax(
   LType(..),
   Expr(..),
-  Name(..)
+  Name(..),
+  TopLevelCmd(..)
 )
 where
 
@@ -45,10 +46,11 @@ data Expr = Var    Name
           | Fun    Name  LType Expr
           | Apply  Expr  Value
           | Rec    Name  LType Expr
-             deriving (Eq,Ord,Show)
+            deriving (Eq,Ord,Show)
 
 data TopLevelCmd = Expr Expr
                  | Def Name Expr
                  | RunDef Name Expr
                  | Use String
                  | Quit
+                   deriving (Eq,Ord,Show)
