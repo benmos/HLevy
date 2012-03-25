@@ -39,7 +39,9 @@ pExpr :: UUP Expr
 pExpr = pApp        <|>
         pBinOpExpr  <|>
         pLetExpr    <|>
-        pIfExpr
+        pIfExpr     <|>
+        pFunExpr    <|>
+        pRecExpr
     where
       pBinOpExpr = foldr pChainl (pNonAppExpr) (map same_prio operators)
       pLetExpr   = Let <$> (pSymbol "let" *> pIdentifier) <*>
@@ -48,6 +50,12 @@ pExpr = pApp        <|>
       pIfExpr    = If  <$> (pSymbol "if"   *> pExpr) <*>
                            (pSymbol "then" *> pExpr) <*>
                            (pSymbol "else" *> pExpr)
+      pFunExpr   = Fun <$> (pSymbol "fun"  *> pIdentifier) <*>
+                           (pSymbol ":"    *> pType) <*>
+                           (pSymbol "->"   *> pExpr)
+      pRecExpr   = Rec <$> (pSymbol "rec"  *> pIdentifier) <*>
+                           (pSymbol ":"    *> pType) <*>
+                           (pSymbol "->"   *> pExpr)
 
 pApp :: UUP Expr
 pApp = Apply <$> pInitialApp <*> pChainl (pure Apply) pNonAppExpr
@@ -88,6 +96,9 @@ pNonArrType = VInt    <$ pSymbol "int" <|>
 
 testExpr :: Expr
 testExpr = runParser "input" pExpr "if true then 3+4*2-100 else f 4"
+
+testExpr2 :: Expr
+testExpr2 = runParser "input" pExpr "fun myf : U int -> f 4"
 
 testType :: LType
 testType = runParser "input" pType "bool -> (int -> U F bool)"
