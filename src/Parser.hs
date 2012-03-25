@@ -4,6 +4,7 @@
 -- Copyright (c) 2012 - Ben Moseley
 --
 module Parser(
+  decomment,
   pType,
   pExpr,
   pTopLevel
@@ -25,16 +26,8 @@ import Text.Printf
 
 type UUP a = P (Str Char String LineColPos) a
 
-operators :: [[(UUP String, String -> Expr -> Expr -> Expr)]]
-operators = [
-              [(pSymbol "<", const Less), (pSymbol "=", const Equal)],
-              [(pSymbol "+", const Plus), (pSymbol "-", const Minus)],
-              [(pSymbol "*", const Times)],
-              [(fmap unName $ (pSymbol "to" *> pIdentifier <* pSymbol "in"), flip To . Name)]
-            ]
-
-same_prio :: [(UUP b, b -> a)] -> UUP a
-same_prio ops = foldr (<|>) empty [ op <$> lexeme p | (p, op) <- ops]
+decomment :: String -> String
+decomment = dropWhile isSpace . unlines . map (takeWhile (/='#')) . lines
 
 pExpr :: UUP Expr
 pExpr = pApp        <|>
@@ -56,7 +49,19 @@ pExpr = pApp        <|>
                            (pSymbol "->"   *> pExpr)
       pRecExpr   = Rec <$> (pSymbol "rec"  *> pIdentifier) <*>
                            (pSymbol ":"    *> pType) <*>
-                           (pSymbol "->"   *> pExpr)
+                           (pSymbol "is"   *> pExpr)
+
+      operators :: [[(UUP String, String -> Expr -> Expr -> Expr)]]
+      operators = [
+                    [(pSymbol "<", const Less), (pSymbol "=", const Equal)],
+                    [(pSymbol "+", const Plus), (pSymbol "-", const Minus)],
+                    [(pSymbol "*", const Times)],
+                    [(fmap unName $ (pSymbol "to" *> pIdentifier <* pSymbol "in"), flip To . Name)]
+                  ]
+
+      same_prio :: [(UUP b, b -> a)] -> UUP a
+      same_prio ops = foldr (<|>) empty [ op <$> lexeme p | (p, op) <- ops]
+
 
 pApp :: UUP Expr
 pApp = (foldl1 Apply .) . (:) <$> pInitialApp <*> pList1 pNonAppExpr
