@@ -96,7 +96,7 @@ pNonAppExpr = EBool True  <$  pSymbol "true"  <<|>
 pIdentifierRaw :: UUP Name
 pIdentifierRaw = Name <$> ((:) <$> pInitial <*> pMunch isSubseq `micro` 1)
     where
-      pInitial = pRange ('a','z')
+      pInitial = pRange ('a','z') <|> pRange ('A','Z') <|> pSym '_'
       isSubseq = (||) <$> isAlphaNum <*> (`elem` "'_")
 
 pIdentifier :: UUP Name
