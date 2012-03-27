@@ -30,14 +30,17 @@ decomment :: String -> String
 decomment = dropWhile isSpace . unlines . map (takeWhile (/='#')) . lines
 
 pExpr :: UUP Expr
-pExpr = pApp        <|>
-        pBinOpExpr  <|>
-        pLetExpr    <|>
-        pIfExpr     <|>
-        pFunExpr    <|>
-        pRecExpr
+pExpr = -- pInitialExpr <|>
+        pBinOpExpr
+
+pInitialExpr :: UUP Expr
+pInitialExpr = pApp        <|>
+               pInitialApp <|>
+               pLetExpr    <|>
+               pIfExpr     <|>
+               pFunExpr    <|>
+               pRecExpr
     where
-      pBinOpExpr = foldr pChainl (pInitialApp) (map same_prio operators)
       pLetExpr   = Let <$> (pSymbol "let" *> pIdentifier) <*>
                            (pSymbol "="   *> pExpr) <*>
                            (pSymbol "in"  *> pExpr)
@@ -51,6 +54,9 @@ pExpr = pApp        <|>
                            (pSymbol ":"    *> pType) <*>
                            (pSymbol "is"   *> pExpr)
 
+pBinOpExpr :: UUP Expr
+pBinOpExpr = foldr pChainl (pInitialExpr {- InitialApp -}) (map same_prio operators)
+    where
       operators :: [[(UUP String, String -> Expr -> Expr -> Expr)]]
       operators = [
                     [(pSymbol "<", const Less), (pSymbol "=", const Equal)],
@@ -75,12 +81,23 @@ pInitialApp = pNonAppExpr <|>
 pNonAppExpr :: UUP Expr
 pNonAppExpr = EBool True  <$  pSymbol "true"  <<|>
               EBool False <$  pSymbol "false" <<|>
-              EInt        <$> pInteger        <<|>
+              EInt        <$> lexeme pIntRaw  <<|>
               Var         <$> pIdentifier <|>
               pParens pExpr
+    where
+      pIntRaw :: (Num a) => Parser a
+      pIntRaw = pOptionalNeg <*> pNaturalRaw <?> "Integer"
+
+      pOptionalNeg :: (Num a) => Parser (a -> a)
+      pOptionalNeg = ((negate <$ (pSym '-')) `opt` id)
+
+
 
 pIdentifierRaw :: UUP Name
-pIdentifierRaw = Name <$> ((:) <$> pRange ('a','z') <*> pMunch isAlphaNum `micro` 1)
+pIdentifierRaw = Name <$> ((:) <$> pInitial <*> pMunch isSubseq `micro` 1)
+    where
+      pInitial = pRange ('a','z')
+      isSubseq = (||) <$> isAlphaNum <*> (`elem` "'_")
 
 pIdentifier :: UUP Name
 pIdentifier = lexeme pIdentifierRaw
