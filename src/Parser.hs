@@ -29,10 +29,6 @@ type UUP a = P (Str Char String LineColPos) a
 decomment :: String -> String
 decomment = dropWhile isSpace . unlines . map (takeWhile (/='#')) . lines
 
-pExpr :: UUP Expr
-pExpr = -- pInitialExpr <|>
-        pBinOpExpr
-
 pInitialExpr :: UUP Expr
 pInitialExpr = pApp        <|>
                pInitialApp <|>
@@ -54,8 +50,8 @@ pInitialExpr = pApp        <|>
                            (pSymbol ":"    *> pType) <*>
                            (pSymbol "is"   *> pExpr)
 
-pBinOpExpr :: UUP Expr
-pBinOpExpr = foldr pChainl (pInitialExpr {- InitialApp -}) (map same_prio operators)
+pExpr :: UUP Expr
+pExpr = foldr pChainl_ng pInitialExpr (map same_prio operators)
     where
       operators :: [[(UUP String, String -> Expr -> Expr -> Expr)]]
       operators = [
@@ -70,7 +66,7 @@ pBinOpExpr = foldr pChainl (pInitialExpr {- InitialApp -}) (map same_prio operat
 
 
 pApp :: UUP Expr
-pApp = (foldl1 Apply .) . (:) <$> pInitialApp <*> pList1 pNonAppExpr
+pApp = (foldl1 Apply .) . (:) <$> pInitialApp <*> pList1_ng pNonAppExpr
 
 pInitialApp :: UUP Expr
 pInitialApp = pNonAppExpr <|>
@@ -94,7 +90,7 @@ pNonAppExpr = EBool True  <$  pSymbol "true"  <<|>
 
 
 pIdentifierRaw :: UUP Name
-pIdentifierRaw = Name <$> ((:) <$> pInitial <*> pMunch isSubseq `micro` 1)
+pIdentifierRaw = Name <$> (((:) <$> pInitial <*> pMunch isSubseq) `micro` 1)
     where
       pInitial = pRange ('a','z') <|> pRange ('A','Z') <|> pSym '_'
       isSubseq = (||) <$> isAlphaNum <*> (`elem` "'_")
