@@ -1,5 +1,17 @@
+module IL (
+  -- * Types
+  VType(..),
+  CType(..),
+  Pat(..),
+  Value(..),
+  Cmd(..),
+  Env,
 
-module IL where
+  -- * Functions
+  transV,
+  transC
+)
+where
 
 import Control.Applicative
 import qualified Syntax
@@ -43,106 +55,97 @@ data Cmd   = Print Value                -- print "abc"
 
 type Env = [ (Syntax.Name, VType) ]
 
-     
+
 -- Translating parsed types into internal types
 
-transVT :: Syntax.LType -> Maybe VType
-transVT Syntax.VInt = return (VRec "int")
-transVT Syntax.VBool = return (VRec "bool")
-transVT (Syntax.VForget t) = 
-  do t' <- transCT t 
-     return (C t')
-transVT _ = Nothing
+transVT :: Alternative f => Syntax.LType -> f VType
+transVT Syntax.VInt        = pure $ VRec "int"
+transVT Syntax.VBool       = pure $ VRec "bool"
+transVT (Syntax.VForget t) = C <$> transCT t
+transVT _                  = empty
 
-transCT :: Syntax.LType -> Maybe CType
-transCT (Syntax.CFree t) = 
-  do t' <- transVT t
-     return (V t')
-transCT (Syntax.CArrow t1 t2) =
-  do t1' <- transVT t1
-     t2' <- transCT t2
-     return (CArrow t1' t2')
+transCT :: Alternative f => Syntax.LType -> f CType
+transCT (Syntax.CFree t)      = V <$> transVT t
+transCT (Syntax.CArrow t1 t2) = CArrow <$> transVT t1 <*> transCT t2
+transCT _                     = empty
 
 -- Translating parsed expressions into internal expressions
--- Translation is also intended to serve as a typechecker for the parsed 
+-- Translation is also intended to serve as a typechecker for the parsed
 -- language
 
-primInt :: Env -> Syntax.Expr -> Syntax.Expr -> String -> VType
-                 -> Maybe (Value, VType)
-primInt env e1 e2 f t = 
-  do (v1, t1) <- transV env e1 
-     case t1 of 
-       VRec "int" ->
-         do (v2, t2) <- transV env e2 
-            case t2 of
-              VRec "int" -> 
-                return (Compute
-                         (Apply (Apply (Force (Var (Syntax.Name f))) v1) v2),
-                        t)
-              _ -> Nothing
-       _ -> Nothing
+primInt :: Env -> Syntax.Expr -> Syntax.Expr -> String -> VType -> Maybe (Value, VType)
+primInt env e1 e2 f t = do
+  (v1, t1) <- transV env e1
+  (v2, t2) <- transV env e2
+  case (t1,t2) of
+     (VRec "int", VRec "int") ->
+              return (Compute ((Force (Var $ Syntax.Name f) `Apply` v1) `Apply` v2),
+                      t)
+     _ -> Nothing
 
+-- | Translate and typecheck a Value
 transV :: Env -> Syntax.Expr -> Maybe (Value, VType)
-transV env (Syntax.Var x) = lookup x env >>= \t -> return (Var x, t)
-transV env (Syntax.EInt i) = return (Tag (show i) Unit, VRec "int")
-transV env (Syntax.EBool True) = return (Tag "true" Unit, VRec "bool")
+transV env (Syntax.Var x      ) = lookup x env >>= \t -> return (Var x, t)
+transV env (Syntax.EInt i     ) = return (Tag (show i) Unit, VRec "int")
+transV env (Syntax.EBool True ) = return (Tag "true" Unit, VRec "bool")
 transV env (Syntax.EBool False) = return (Tag "true" Unit, VRec "bool")
 transV env (Syntax.Times e1 e2) = primInt env e1 e2 "_prim_times" (VRec "int")
-transV env (Syntax.Plus e1 e2) = primInt env e1 e2 "_prim_plus" (VRec "int")
+transV env (Syntax.Plus e1 e2 ) = primInt env e1 e2 "_prim_plus" (VRec "int")
 transV env (Syntax.Minus e1 e2) = primInt env e1 e2 "_prim_minus" (VRec "int")
 transV env (Syntax.Equal e1 e2) = primInt env e1 e2 "_prim_eq" (VRec "bool")
-transV env (Syntax.Less e1 e2) = primInt env e1 e2 "_prim_lt" (VRec "bool")
-transV env (Syntax.Thunk e) = 
-  do (cmd, t) <- transC env e
-     return (Thunk cmd, C t)
+transV env (Syntax.Less e1 e2 ) = primInt env e1 e2 "_prim_lt" (VRec "bool")
+transV env (Syntax.Thunk e    ) = do
+  (cmd, t) <- transC env e
+  return (Thunk cmd, C t)
 
+-- | Translate and typecheck a Command
 transC :: Env -> Syntax.Expr -> Maybe (Cmd, CType)
-transC env (Syntax.Force e) =
-  do (v, t) <- transV env e
-     case t of
-        C t' -> return (Force v, t')
-        _ -> Nothing
-transC env (Syntax.Return e) =
-  do (v, t) <- transV env e
-     return (Return v, V t)
-transC env (Syntax.To e1 x e2) =
-  do (cmd1, t1) <- transC env e1
-     case t1 of 
-       V t1' ->
-         do (cmd2, t2) <- transC ((x, t1') : env) e2 
-            return (Do x cmd1 cmd2, t2)
-       _ -> Nothing 
-transC env (Syntax.Let x e1 e2) = 
-  do (v1, t1) <- transV env e1
-     (cmd2, t2) <- transC ((x, t1) : env) e2
-     return (Case v1 [ (PVar x, cmd2) ], t2)
-transC env (Syntax.If e1 e2 e3) = 
-  do (v1, t1) <- transV env e1
-     case t1 of 
-       VRec "bool" ->
-         do (cmd2, t2) <- transC env e2
-            (cmd3, t3) <- transC env e3
-            if not (t2 == t3)
-            then Nothing
-            else return (Case v1 [ (PTag "true" PUnit, cmd2), 
-                                   (PTag "false" PUnit, cmd3) ], t2)
-       _ -> Nothing
-transC env (Syntax.Fun x t1 e) = 
-  do t1' <- transVT t1
-     (cmd, t2) <- transC ((x, t1') : env) e
-     return (Fun x t1' cmd, t2)
-transC env (Syntax.Apply e1 e2) = 
-  do (cmd1, t1) <- transC env e1
-     (v2, t2) <- transV env e2
-     case t1 of
-       CArrow t' t ->
-         if not (t2 == t')
+transC env (Syntax.Force e) = do
+  (v, t) <- transV env e
+  case t of
+    C t' -> return (Force v, t')
+    _ -> Nothing
+transC env (Syntax.Return e) = do
+  (v, t) <- transV env e
+  return (Return v, V t)
+transC env (Syntax.To e1 x e2) = do
+  (cmd1, t1) <- transC env e1
+  case t1 of
+    V t1' -> do
+      (cmd2, t2) <- transC ((x, t1') : env) e2
+      return (Do x cmd1 cmd2, t2)
+    _ -> Nothing
+transC env (Syntax.Let x e1 e2) = do
+  (v1, t1) <- transV env e1
+  (cmd2, t2) <- transC ((x, t1) : env) e2
+  return (Case v1 [ (PVar x, cmd2) ], t2)
+transC env (Syntax.If e1 e2 e3) = do
+  (v1, t1) <- transV env e1
+  case t1 of
+    VRec "bool" -> do
+      (cmd2, t2) <- transC env e2
+      (cmd3, t3) <- transC env e3
+      if t2 /= t3
+      then Nothing
+      else return (Case v1 [ (PTag "true" PUnit, cmd2),
+                             (PTag "false" PUnit, cmd3) ], t2)
+    _ -> Nothing
+transC env (Syntax.Fun x t1 e) = do
+  t1' <- transVT t1
+  (cmd, t2) <- transC ((x, t1') : env) e
+  return (Fun x t1' cmd, t2)
+transC env (Syntax.Apply e1 e2) = do
+  (cmd1, t1) <- transC env e1
+  (v2, t2) <- transV env e2
+  case t1 of
+    CArrow t' t ->
+         if t2 /= t'
          then Nothing
          else return (Apply cmd1 v2, t)
-       _ -> Nothing
-transC env (Syntax.Rec x t e) = 
-  do t' <- transCT t
-     (cmd, t2) <- transC ((x, C t') : env) e
-     if not (t' == t2) 
-     then Nothing
-     else return (Rec x t' cmd, t')
+    _ -> Nothing
+transC env (Syntax.Rec x t e) = do
+  t' <- transCT t
+  (cmd, t2) <- transC ((x, C t') : env) e
+  if t' /= t2
+  then Nothing
+  else return (Rec x t' cmd, t')

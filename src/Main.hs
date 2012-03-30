@@ -8,6 +8,7 @@ import Parser
 import UUParsingLibFixes
 
 import Text.ParserCombinators.UU.Utils hiding (runParser)
+import IL
 
 main :: IO ()
 main = do
