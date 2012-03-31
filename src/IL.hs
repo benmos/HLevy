@@ -5,11 +5,14 @@ module IL (
   Pat(..),
   Value(..),
   Cmd(..),
+  TopLevelCmd(..),
   Env,
+  TagEnv,
+  LabEnv,
 
   -- * Functions
-  transV,
-  transC
+  transTop,
+  transTops
 )
 where
 
@@ -54,43 +57,15 @@ data Cmd   = Print Value Cmd            -- print "abc"
              deriving (Eq,Ord,Show)
 
 data TopLevelCmd
-           = TopRun Cmd                 -- cmd
+           = TopCmd Cmd                 -- cmd
+           | TopValue Value             -- v <- Note, this is dumb.
            | TopLet Syntax.Name Value   -- let x = v
-           | TopDo  Syntax.Name Value   -- do x <- cmd
-           
+           | TopDo  Syntax.Name Cmd     -- do x <- cmd
+             deriving (Eq,Ord,Show)
 
 type Env = [(Syntax.Name, VType)]
 type TagEnv = String -> Maybe (String, VType)
 type LabEnv = String -> Maybe (String, CType)
-
-defaultTagEnv s =
-  case (s, reads s :: [(Integer, String)]) of
-    ('"' : _, _) -> Just ("string", VUnit)
-    ("true", _) -> Just ("bool", VUnit)
-    ("false", _) -> Just ("bool", VUnit)
-    ("Leaf", _) -> Just ("tree", VRec "int")
-    ("Node", _) -> Just ("tree", VPair (VRec "tree") (VRec "tree"))
-    ("Nil", _) -> Just ("list", VUnit)
-    ("Cons", _) -> Just ("list", VPair (VRec "int") (VRec "intlist"))
-    ("BoolFn", _) -> Just ("somefn", C (CArrow (VRec "bool") (V (VRec "bool"))))
-    ("IntFn", _) -> Just ("somefn", C (CArrow (VRec "int") (V (VRec "int"))))
-    (_, [(_,"")]) -> Just ("int", VUnit)
-    _ -> Nothing
-
-defaultLabEnv s =
-  case s of 
-    "head" -> Just ("stream", V (VRec "int"))
-    "tail" -> Just ("stream", CRec "stream")
-    "isEmpty" -> Just ("iset", V (VRec "bool"))
-    "contains" -> Just ("iset", CArrow (VRec "int") (CRec "iset"))
-    "insert" -> Just ("iset", CArrow (VRec "int") (CRec "iset"))
-    "union" -> Just ("iset", CArrow (C (CRec "iset")) (CRec "iset"))
-    "Insert" -> Just ("insertunion", 
-                      CArrow (VPair (C (CRec "iset")) (VRec "int"))
-                        (CRec "iset"))
-    "Union" -> Just ("insertunion", 
-                      CArrow (VPair (C (CRec "iset")) (C (CRec "iset")))
-                        (CRec "iset"))
 
 inCtx :: Syntax.Name -> Env -> Bool
 inCtx x [] = False
@@ -239,6 +214,7 @@ transV env (Syntax.Less e1 e2 ) = primInt env e1 e2 "_prim_lt" (VRec "bool")
 transV env (Syntax.Thunk e    ) = do
   (cmd, t) <- transC env e
   return (Thunk cmd, C t)
+transV env _ = empty
 
 -- | Translate and typecheck a Command
 transC :: Env -> Syntax.Expr -> Maybe (Cmd, CType)
@@ -275,7 +251,7 @@ transC env (Syntax.If e1 e2 e3) = do
 transC env (Syntax.Fun x t1 e) = do
   t1' <- transVT t1
   (cmd, t2) <- transC ((x, t1') : env) e
-  return (Fun x t1' cmd, t2)
+  return (Fun x t1' cmd, CArrow t1' t2)
 transC env (Syntax.Apply e1 e2) = do
   (cmd1, t1) <- transC env e1
   (v2, t2) <- transV env e2
@@ -291,13 +267,30 @@ transC env (Syntax.Rec x t e) = do
   if t' /= t2
   then Nothing
   else return (Rec x t' cmd, t')
+transC env _ = empty
 
-{-
--- Typechecking the intermediate language
+transTop :: Env -> Syntax.TopLevelCmd -> Maybe (TopLevelCmd, Env)
+transTop env (Syntax.Expr e) = do
+  top <- (TopCmd . fst <$> transC env e) <|> (TopValue . fst <$> transV env e)
+  return (top, env)
+transTop env (Syntax.Def x e) = do
+  (v, t) <- transV env e
+  return (TopLet x v, (x, t) : env)
+transTop env (Syntax.RunDef x e) = do
+  (cmd, t) <- transC env e
+  case t of 
+    V t -> return (TopDo x cmd, (x, t) : env)
+    _ -> empty
+-- I think these two only really make sense in an interactive top-level
+-- loop, and if we have an interactive top-level loop, we just shouldn't
+-- have these commands ever get passed on to the translation function. - rjs
+transTop env (Syntax.Use s) = empty 
+transTop env (Syntax.Quit) = empty 
 
-type VRecEnv = [ (String, [ (String, VType) ]) ]
-type CRecEnv = [ (String, [ (String, CType) ]) ]
-
-lookupVC x = Just [] 
-  [ ("bool", [ ("true", VUnit), ("false", VUnit) ]) ]
--}
+-- Translate and typecheck as many of the top-level commands as possible
+transTops :: Env -> [Syntax.TopLevelCmd] -> [TopLevelCmd]
+transTops env [] = []
+transTops env (top : tops) = 
+  case transTop env top of 
+    Nothing -> []
+    Just (top', env') -> top' : transTops env' tops
