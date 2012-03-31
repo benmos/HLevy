@@ -68,7 +68,7 @@ inCtx x [] = False
 inCtx x ((y, _) : ctx) = x == y || inCtx x ctx
 
 -- | Typechecking a pattern against a type produces an environment 
-tcPat :: Alternative f => TagEnv -> Env -> Pat -> VType -> f Env
+tcPat :: TagEnv -> Env -> Pat -> VType -> Maybe Env
 tcPat tenv env (PVar x) t = 
   -- Can't bind a variable in a pattern more than once
   if inCtx x env then return ((x, t) : env) else empty
@@ -82,10 +82,8 @@ tcPat tenv env (PPair p1 p2) (VPair t1 t2) = do
 tcPat tenv env PUnit VUnit = return env
 
 -- | Typechecking a Value
-tcValue :: Alternative f => TagEnv -> LabEnv -> Env -> Value -> f VType
-tcValue tenv lenv env (Var x) = do
-  t <- lookup x env
-  return t
+tcValue :: TagEnv -> LabEnv -> Env -> Value -> Maybe VType
+tcValue tenv lenv env (Var x) = lookup x env
 tcValue tenv lenv env (Tag c v) = do
   (a, t) <- tenv c
   t' <- tcValue tenv lenv env v
@@ -94,7 +92,7 @@ tcValue tenv lenv env (Thunk cmd) = C <$> tcCmd tenv lenv env cmd
 tcValue tenv lenv env (Pair v1 v2) = do
   t1 <- tcValue tenv lenv env v1
   t2 <- tcValue tenv lenv env v2
-  return VPair t1 t2
+  return (VPair t1 t2)
 tcValue tenv lenv env Unit = return VUnit
 tcValue tenv lenv env (Compute cmd) = do
   t <- tcCmd tenv lenv env cmd 
@@ -103,7 +101,7 @@ tcValue tenv lenv env (Compute cmd) = do
     _ -> empty
 
 -- | Typechecking a Cmd
-tcCmd :: Alternative f => TagEnv -> LabEnv -> Env -> Cmd -> f CType
+tcCmd :: TagEnv -> LabEnv -> Env -> Cmd -> Maybe CType
 tcCmd tenv lenv env (Print v cmd) = do
   t <- tcValue tenv lenv env v
   case t of
@@ -143,12 +141,12 @@ tcCmd tenv lenv env (Project cmd proj) = do
 tcCmd tenv lenv env (Record fields) = CRec <$> tcFields tenv lenv env fields
 
 -- | Typechecking the arms of a pattern
-tcArms :: Alternative f => TagEnv -> LabEnv -> Env 
+tcArms :: TagEnv -> LabEnv -> Env 
            -> VType -> [(Pat, Cmd)] 
-           -> f CType
+           -> Maybe CType
 tcArms tenv lenv env t [] = empty -- Can't synthesize type of void elim
 tcArms tenv lenv env t [(pat, cmd)] = do
-  env' <- tcPat tenv [] pat
+  env' <- tcPat tenv [] pat t
   tcCmd tenv lenv (env' ++ env) cmd
 tcArms tenv lenv env t ((pat, cmd) : arms) = do
   env' <- tcPat tenv [] pat t
@@ -157,8 +155,8 @@ tcArms tenv lenv env t ((pat, cmd) : arms) = do
   if tcont == tcont' then return tcont else empty
 
 -- | Typechecking the fields of a record
-tcFields :: Alternative f => TagEnv -> LabEnv -> Env -> [(String, Cmd)] 
-             -> f String
+tcFields :: TagEnv -> LabEnv -> Env -> [(String, Cmd)] 
+             -> Maybe String
 tcFields tenv lenv env [] = return "top" -- Name of the empty record
 tcFields tenv lenv env [(proj, cmd)] = do
   (a, t) <- lenv proj
