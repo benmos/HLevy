@@ -8,7 +8,15 @@ import Parser
 import UUParsingLibFixes
 
 import Text.ParserCombinators.UU.Utils hiding (runParser)
+import qualified Syntax
 import IL
+
+load :: String -> IO [Syntax.TopLevelCmd]
+load s = do
+  f <- readFile s
+  let s = decomment f
+  let p = runParser s pTopLevel s
+  return p
 
 main :: IO ()
 main = do
