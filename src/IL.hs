@@ -149,3 +149,13 @@ transC env (Syntax.Rec x t e) = do
   if t' /= t2
   then Nothing
   else return (Rec x t' cmd, t')
+
+{-
+-- Typechecking the intermediate language
+
+type VRecEnv = [ (String, [ (String, VType) ]) ]
+type CRecEnv = [ (String, [ (String, CType) ]) ]
+
+lookupVC x = Just [] 
+  [ ("bool", [ ("true", VUnit), ("false", VUnit) ]) ]
+-}
