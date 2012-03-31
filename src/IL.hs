@@ -11,11 +11,14 @@ module IL (
   LabEnv,
 
   -- * Functions
-  transTop,
-  transTops
+  tcCmd,
+  tcValue,
+  tcTop,
+  transTop
 )
 where
 
+import Data.Maybe
 import Control.Applicative
 import qualified Syntax
 
@@ -57,10 +60,10 @@ data Cmd   = Print Value Cmd            -- print "abc"
              deriving (Eq,Ord,Show)
 
 data TopLevelCmd
-           = TopCmd Cmd                 -- cmd
-           | TopValue Value             -- v <- Note, this is dumb.
-           | TopLet Syntax.Name Value   -- let x = v
-           | TopDo  Syntax.Name Cmd     -- do x <- cmd
+           = TopCmd Cmd                       -- cmd
+           | TopValue Value                   -- v <=== Note, this is dumb.
+           | TopLet Syntax.Name VType Value   -- let x : t = v
+           | TopDo  Syntax.Name VType Cmd     -- do x : V t <- cmd
              deriving (Eq,Ord,Show)
 
 type Env = [(Syntax.Name, VType)]
@@ -172,6 +175,19 @@ tcFields tenv lenv env ((proj, cmd) : fields) = do
   a' <- tcFields tenv lenv env fields
   if t == t' && a == a' then return a else empty
 
+-- | Typechecking a top-level declaration
+tcTop :: TagEnv -> LabEnv -> Env -> TopLevelCmd -> Bool
+tcTop tenv lenv env (TopCmd cmd) = isJust (tcCmd tenv lenv env cmd)
+tcTop tenv lenv env (TopValue v) = isJust (tcValue tenv lenv env v)
+tcTop tenv lenv env (TopLet x t v) = 
+  case tcValue tenv lenv env v of
+    Just t' -> t == t'
+    _ -> False
+tcTop tenv lenv env (TopDo x t v) = 
+  case tcCmd tenv lenv env v of
+    Just (V t') -> t == t'
+    _ -> False
+
 -- Translating parsed types into internal types
 
 transVT :: Alternative f => Syntax.LType -> f VType
@@ -275,11 +291,11 @@ transTop env (Syntax.Expr e) = do
   return (top, env)
 transTop env (Syntax.Def x e) = do
   (v, t) <- transV env e
-  return (TopLet x v, (x, t) : env)
+  return (TopLet x t v, (x, t) : env)
 transTop env (Syntax.RunDef x e) = do
   (cmd, t) <- transC env e
   case t of 
-    V t -> return (TopDo x cmd, (x, t) : env)
+    V t -> return (TopDo x t cmd, (x, t) : env)
     _ -> empty
 -- I think these two only really make sense in an interactive top-level
 -- loop, and if we have an interactive top-level loop, we just shouldn't
