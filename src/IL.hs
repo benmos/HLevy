@@ -63,6 +63,35 @@ type Env = [(Syntax.Name, VType)]
 type TagEnv = String -> Maybe (String, VType)
 type LabEnv = String -> Maybe (String, CType)
 
+defaultTagEnv s =
+  case (s, reads s :: [(Integer, String)]) of
+    ('"' : _, _) -> Just ("string", VUnit)
+    ("true", _) -> Just ("bool", VUnit)
+    ("false", _) -> Just ("bool", VUnit)
+    ("Leaf", _) -> Just ("tree", VRec "int")
+    ("Node", _) -> Just ("tree", VPair (VRec "tree") (VRec "tree"))
+    ("Nil", _) -> Just ("list", VUnit)
+    ("Cons", _) -> Just ("list", VPair (VRec "int") (VRec "intlist"))
+    ("BoolFn", _) -> Just ("somefn", C (CArrow (VRec "bool") (V (VRec "bool"))))
+    ("IntFn", _) -> Just ("somefn", C (CArrow (VRec "int") (V (VRec "int"))))
+    (_, [(_,"")]) -> Just ("int", VUnit)
+    _ -> Nothing
+
+defaultLabEnv s =
+  case s of 
+    "head" -> Just ("stream", V (VRec "int"))
+    "tail" -> Just ("stream", CRec "stream")
+    "isEmpty" -> Just ("iset", V (VRec "bool"))
+    "contains" -> Just ("iset", CArrow (VRec "int") (CRec "iset"))
+    "insert" -> Just ("iset", CArrow (VRec "int") (CRec "iset"))
+    "union" -> Just ("iset", CArrow (C (CRec "iset")) (CRec "iset"))
+    "Insert" -> Just ("insertunion", 
+                      CArrow (VPair (C (CRec "iset")) (VRec "int"))
+                        (CRec "iset"))
+    "Union" -> Just ("insertunion", 
+                      CArrow (VPair (C (CRec "iset")) (C (CRec "iset")))
+                        (CRec "iset"))
+
 inCtx :: Syntax.Name -> Env -> Bool
 inCtx x [] = False
 inCtx x ((y, _) : ctx) = x == y || inCtx x ctx
