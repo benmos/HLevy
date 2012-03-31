@@ -2,4 +2,12 @@ This is a Haskell implementation of the Levy language.
 
 The language is an implementation of Paul Levy's Call By Push Value (CBPV) calculus.
 
-It is based Rob Simmons fork of Andrej Bauer's implementation of Levy.
+It is based on Rob Simmons fork of Andrej Bauer's implementation of Levy.
+
+Use: 
+
+$ cd hlevy/src
+$ ghci Main.hs
+<snip>
+*Main> load "../example.levy"
+

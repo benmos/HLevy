@@ -78,7 +78,7 @@ inCtx x ((y, _) : ctx) = x == y || inCtx x ctx
 tcPat :: TagEnv -> Env -> Pat -> VType -> Maybe Env
 tcPat tenv env (PVar x) t = 
   -- Can't bind a variable in a pattern more than once
-  if inCtx x env then return ((x, t) : env) else empty
+  if inCtx x env then empty else return ((x, t) : env)
 tcPat tenv env (PTag c pat) (VRec a) = do
   (a', t) <- tenv c 
   if a /= a' then empty
