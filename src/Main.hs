@@ -10,6 +10,7 @@ import UUParsingLibFixes
 import Text.ParserCombinators.UU.Utils hiding (runParser)
 import qualified Syntax
 import IL
+import Exec
 
 -- | Common types
 tint = VRec "int"
@@ -54,26 +55,41 @@ defaultEnv =
     (Syntax.Name "_prim_eq", C (CArrow tint (CArrow tint (V tbool)))),
     (Syntax.Name "_prim_lt", C (CArrow tint (CArrow tint (V tbool)))) ]
 
-loadTop :: Env -> [Syntax.TopLevelCmd] -> IO ()
-loadTop env [] = putStrLn "Done.\n"
-loadTop env (top : tops) = 
+wi :: (Int -> IO Terminal) -> IO Terminal
+wi f = return (TPrim (\(RTag i RUnit) -> f (read i)))
+
+ti :: Int -> IO Terminal
+ti i = return (TValue (RTag (show i) RUnit))
+
+tb :: Bool -> IO Terminal
+tb True = return (TValue (RTag "true" RUnit))
+tb False = return (TValue (RTag "false" RUnit))
+
+defaultVEnv = 
+  [ (Syntax.Name "_prim_plus", RPrim (wi (\x -> wi (\y -> ti (x + y))))),
+    (Syntax.Name "_prim_times", RPrim (wi (\x -> wi (\y -> ti (x * y))))),
+    (Syntax.Name "_prim_minus", RPrim (wi (\x -> wi (\y -> ti (x - y))))),
+    (Syntax.Name "_prim_eq", RPrim (wi (\x -> wi (\y -> tb (x == y))))),
+    (Syntax.Name "_prim_lt", RPrim (wi (\x -> wi (\y -> tb (x < y))))) ]
+
+loadTop :: Env -> VEnv -> [Syntax.TopLevelCmd] -> IO ()
+loadTop env venv [] = putStrLn "Done.\n"
+loadTop env venv (top : tops) = 
   case transTop env top of
     Nothing -> 
       putStrLn "TYPE ERROR:" >>
       print top >> 
       putStrLn "\n"
     Just (top', env') -> 
-      if tcTop defaultTagEnv defaultLabEnv env top' 
-      then print top' >>
-           loadTop env' tops
-      else putStrLn "ERROR TYPECHECKING IL:" >>
-           print top'
+      if not (tcTop defaultTagEnv defaultLabEnv env top')
+      then putStrLn "ERROR TYPECHECKING IL:" >> print top'
+      else runTop venv top' >>= \venv' -> loadTop env' venv' tops
 
 load :: String -> IO ()
 load s = do
   f <- readFile s
   let s = decomment f
-  loadTop defaultEnv (runParser s pTopLevel s)
+  loadTop defaultEnv defaultVEnv (runParser s pTopLevel s)
 
 main :: IO ()
 main = do
