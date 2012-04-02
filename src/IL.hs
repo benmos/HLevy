@@ -26,12 +26,25 @@ data VType = VRec String
            | VPair VType VType
            | VUnit
            | C CType
-             deriving (Eq,Ord,Show)
+             deriving (Eq,Ord)
+
+instance Show VType where show (VRec s) = s
+                          show (VPair t1 t2) = 
+                            "(" ++ show t1 ++ "," ++ show t2 ++ ")"
+                          show (VUnit) = "()"
+                          show (C t) = "U " ++ show t
 
 data CType = CRec String
            | CArrow VType CType
            | V VType
-             deriving (Eq,Ord,Show)
+             deriving (Eq,Ord)
+
+instance Show CType where show (CRec s) = s
+                          show (CArrow (C t1) t2) = 
+                            "(U " ++ show t1 ++ ") -> " ++ show t2 
+                          show (CArrow t1 t2) = 
+                            show t1 ++ " -> " ++ show t2 
+                          show (V t) = "F " ++ show t
 
 data Pat   = PVar Syntax.Name
            | PTag String Pat
@@ -59,8 +72,8 @@ data Cmd   = Do Syntax.Name Cmd Cmd     -- do x <- cmd cmd
              deriving (Eq,Ord,Show)
 
 data TopLevelCmd
-           = TopCmd Cmd                       -- cmd
-           | TopValue Value                   -- v <=== Note, this is dumb.
+           = TopCmd (Cmd, CType)              -- cmd
+           | TopValue (Value, VType)          -- v <=== Note, this is dumb?
            | TopLet Syntax.Name VType Value   -- let x : t = v
            | TopDo  Syntax.Name VType Cmd     -- do x : V t <- cmd
              deriving (Eq,Ord,Show)
@@ -171,8 +184,14 @@ tcFields tenv lenv env ((proj, cmd) : fields) = do
 
 -- | Typechecking a top-level declaration
 tcTop :: TagEnv -> LabEnv -> Env -> TopLevelCmd -> Bool
-tcTop tenv lenv env (TopCmd cmd) = isJust (tcCmd tenv lenv env cmd)
-tcTop tenv lenv env (TopValue v) = isJust (tcValue tenv lenv env v)
+tcTop tenv lenv env (TopCmd (cmd, t)) = 
+  case tcCmd tenv lenv env cmd of
+    Just t' -> t == t'
+    _ -> False 
+tcTop tenv lenv env (TopValue (v, t)) = 
+  case tcValue tenv lenv env v of
+    Just t' -> t == t'
+    _ -> False
 tcTop tenv lenv env (TopLet x t v) = 
   case tcValue tenv lenv env v of
     Just t' -> t == t'
@@ -281,7 +300,7 @@ transC env _ = empty
 
 transTop :: Env -> Syntax.TopLevelCmd -> Maybe (TopLevelCmd, Env)
 transTop env (Syntax.Expr e) = do
-  top <- (TopCmd . fst <$> transC env e) <|> (TopValue . fst <$> transV env e)
+  top <- (TopCmd <$> transC env e) <|> (TopValue <$> transV env e)
   return (top, env)
 transTop env (Syntax.Def x e) = do
   (v, t) <- transV env e

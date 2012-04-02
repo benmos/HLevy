@@ -40,7 +40,7 @@ data Terminal = TValue RunVal                  -- produce V
               | TPrim (RunVal -> IO Terminal)  -- \x.cmd
               | TRecord VEnv [(String, Cmd)]   -- {l1:cmd1,...}
 
-instance Show Terminal where show (TValue rv) = "F " ++ show rv
+instance Show Terminal where show (TValue rv) = "return " ++ show rv
                              show (TFun _ x _) = "fn " ++ show x ++ " -> ..."
                              show (TPrim _) = "<primitive function>"
                              show (TRecord _ _) = "{...}"
@@ -128,19 +128,19 @@ runApply (TPrim f) rv = f rv
 
 -- | Run a toplevel expression
 runTop :: VEnv -> TopLevelCmd -> IO VEnv
-runTop env (TopCmd cmd) = 
+runTop env (TopCmd (cmd, t)) = 
   runCmd env cmd >>= \term ->
-  putStrLn ("Computation: " ++ show term) >>
+  putStrLn ("comp " ++ show t ++ " = " ++ show term) >>
   return env
-runTop env (TopValue v) = 
+runTop env (TopValue (v, t)) = 
   runValue env v >>= \rv ->
-  putStrLn ("Value: " ++ show rv) >>
+  putStrLn ("val " ++ show t ++ " = " ++ show rv) >>
   return env
 runTop env (TopLet x t v) =
   runValue env v >>= \rv ->
-  putStrLn (show x ++ " : " ++ show t ++ " = " ++ show rv) >>
+  putStrLn ("val " ++ show x ++ " : " ++ show t ++ " = " ++ show rv) >>
   return ((x, rv) : env)
 runTop env (TopDo x t cmd) = 
   runCmd env cmd >>= \(TValue rv) ->
-  putStrLn (show x ++ " : " ++ show t ++ " = " ++ show rv) >>
+  putStrLn ("val " ++ show x ++ " : " ++ show t ++ " = " ++ show rv) >>
   return ((x, rv) : env)
