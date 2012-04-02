@@ -90,10 +90,6 @@ runCase env rv ((pat, cmd) : arms) =
 
 -- | Turns a command into what Levy calls a "terminal computation"
 runCmd :: VEnv -> Cmd -> IO Terminal
-runCmd env (Print v cmd) = do
-  RTag ('"' : s) RUnit <- runValue env v
-  () <- putStrLn s
-  runCmd env cmd
 runCmd env (Do x cmd1 cmd2) = do
   TValue rv1 <- runCmd env cmd1
   runCmd ((x, rv1) : env) cmd2

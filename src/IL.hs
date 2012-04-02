@@ -47,8 +47,7 @@ data Value = Var Syntax.Name            -- x
            | Compute Cmd                -- < cmd >
              deriving (Eq,Ord,Show)
 
-data Cmd   = Print Value Cmd            -- print "abc"
-           | Do Syntax.Name Cmd Cmd     -- do x <- cmd cmd
+data Cmd   = Do Syntax.Name Cmd Cmd     -- do x <- cmd cmd
            | Case Value [ (Pat, Cmd) ]  -- case v of | p1 -> cmd1 | pn -> cmdn
            | Fun Syntax.Name VType Cmd  -- fn x:t -> cmd
            | Rec Syntax.Name CType Cmd  -- rec x:t is cmd
@@ -109,11 +108,6 @@ tcValue tenv lenv env (Compute cmd) = do
 
 -- | Typechecking a Cmd
 tcCmd :: TagEnv -> LabEnv -> Env -> Cmd -> Maybe CType
-tcCmd tenv lenv env (Print v cmd) = do
-  t <- tcValue tenv lenv env v
-  case t of
-    VRec "string" -> tcCmd tenv lenv env cmd
-    _ -> empty
 tcCmd tenv lenv env (Do x cmd1 cmd2) = do
   t1 <- tcCmd tenv lenv env cmd1
   case t1 of 
