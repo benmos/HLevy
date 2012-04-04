@@ -28,20 +28,27 @@ data VType = VRec String
            | C CType
              deriving (Eq,Ord)
 
+wrap :: Bool -> String -> String
+wrap False s = s
+wrap True s = "(" ++ s ++ ")"
+
 instance Show VType where show (VRec s) = s
                           show (VPair t1 t2) = 
                             "(" ++ show t1 ++ "," ++ show t2 ++ ")"
                           show (VUnit) = "()"
-                          show (C t) = "U " ++ show t
+                          show (C t) = 
+                            "U " ++ wrap (parensC t) (show t)
 
 data CType = CRec String
            | CArrow VType CType
            | V VType
              deriving (Eq,Ord)
 
+parensC :: CType -> Bool
+parensC (CArrow _ _) = True
+parensC _ = False
+
 instance Show CType where show (CRec s) = s
-                          show (CArrow (C t1) t2) = 
-                            "(U " ++ show t1 ++ ") -> " ++ show t2 
                           show (CArrow t1 t2) = 
                             show t1 ++ " -> " ++ show t2 
                           show (V t) = "F " ++ show t

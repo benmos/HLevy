@@ -72,6 +72,8 @@ fun x : U F U F U F int -> (force x to y in force y to z in force z) ;;
 fun x : int -> return (thunk (return x)) ;; 
 fun x : int -> return (thunk (return (thunk (return x)))) ;; 
 
+thunk (return (thunk (fun x : int -> return x)));;
+
 # For convenience we have top-level definitions of values ("let x = e" instead
 # of "let x = e in ..." and top-level execution of computations ("do x = e" 
 # instead of "e to x in ..."): 
